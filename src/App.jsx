@@ -1,4 +1,24 @@
 import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
+import "./Dashboard.css";
+
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line
+} from "recharts";
 
 function App() {
   const [page, setPage] = useState("home");
@@ -18,17 +38,31 @@ function App() {
   const [expenseAmount, setExpenseAmount] = useState("");
   const [category, setCategory] = useState("Food");
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("All");
+
   const [savingsGoal, setSavingsGoal] = useState(0);
   const [goalInput, setGoalInput] = useState("");
 
   const [monthlyBudgets, setMonthlyBudgets] = useState({});
   const [budgetInput, setBudgetInput] = useState("");
 
-  const [selectedMonth, setSelectedMonth] = useState(
-    new Date().getFullYear() +
-      "-" +
-      String(new Date().getMonth() + 1).padStart(2, "0")
-  );
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const today = new Date();
+
+    return `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}`;
+  });
+
+  const chartColors = [
+    "#2563eb",
+    "#e11d48",
+    "#059669",
+    "#f59e0b",
+    "#9333ea",
+    "#0891b2"
+  ];
 
   // Get transaction month
   const getMonthKey = (item) => {
@@ -64,32 +98,37 @@ function App() {
     return item.date || "";
   };
 
-  // Load saved budget data
+  // Load saved user data
   useEffect(() => {
-    if (currentUser) {
-      const saved = JSON.parse(
-        localStorage.getItem("budget_" + currentUser.email)
-      ) || {};
+    if (!currentUser) return;
 
-      setIncome(saved.income || 0);
-      setIncomeHistory(saved.incomeHistory || []);
-      setExpenses(saved.expenses || []);
-      setSavingsGoal(saved.savingsGoal || 0);
-      setMonthlyBudgets(saved.monthlyBudgets || {});
-      setBudgetInput(
-        saved.monthlyBudgets?.[selectedMonth]
-          ? String(saved.monthlyBudgets[selectedMonth])
-          : ""
-      );
-    }
-  }, [currentUser]);
+    const saved = JSON.parse(
+      localStorage.getItem("budget_" + currentUser.email) || "{}"
+    );
 
-  // Save budget data
+    setIncome(saved.income || 0);
+    setIncomeHistory(saved.incomeHistory || []);
+    setExpenses(saved.expenses || []);
+    setSavingsGoal(saved.savingsGoal || 0);
+
+    const budgets = saved.monthlyBudgets || {};
+
+    setMonthlyBudgets(budgets);
+
+    setBudgetInput(
+      budgets[selectedMonth]
+        ? String(budgets[selectedMonth])
+        : ""
+    );
+  }, [currentUser, selectedMonth]);
+
+  // Save user budget data
   const saveBudget = (
     newIncome,
     newExpenses,
     newGoal,
-    newIncomeHistory = incomeHistory
+    newIncomeHistory = incomeHistory,
+    newBudgets = monthlyBudgets
   ) => {
     if (!currentUser) return;
 
@@ -100,7 +139,7 @@ function App() {
         incomeHistory: newIncomeHistory,
         expenses: newExpenses,
         savingsGoal: newGoal,
-        monthlyBudgets: monthlyBudgets
+        monthlyBudgets: newBudgets
       })
     );
   };
@@ -114,9 +153,16 @@ function App() {
       return;
     }
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
+    const users = JSON.parse(
+      localStorage.getItem("users") || "[]"
+    );
 
-    if (users.some((user) => user.email === email.trim())) {
+    if (
+      users.some(
+        (user) =>
+          user.email.toLowerCase() === email.trim().toLowerCase()
+      )
+    ) {
       setMessage("Email already registered. Please login.");
       return;
     }
@@ -130,7 +176,6 @@ function App() {
     localStorage.setItem("users", JSON.stringify(users));
 
     setName("");
-    setEmail("");
     setPassword("");
     setMessage("Account created! Please login.");
     setPage("login");
@@ -140,10 +185,14 @@ function App() {
   const login = (e) => {
     e.preventDefault();
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
+    const users = JSON.parse(
+      localStorage.getItem("users") || "[]"
+    );
 
     const user = users.find(
-      (u) => u.email === email.trim() && u.password === password
+      (u) =>
+        u.email.toLowerCase() === email.trim().toLowerCase() &&
+        u.password === password
     );
 
     if (user) {
@@ -168,7 +217,6 @@ function App() {
       return;
     }
 
-    const updatedIncome = income + amount;
     const today = new Date();
 
     const newEntry = {
@@ -182,6 +230,7 @@ function App() {
       ].join("-")
     };
 
+    const updatedIncome = income + amount;
     const updatedHistory = [...incomeHistory, newEntry];
 
     setIncome(updatedIncome);
@@ -255,10 +304,15 @@ function App() {
       ].join("-")
     };
 
-    const updated = [...expenses, newExpense];
+    const updatedExpenses = [...expenses, newExpense];
 
-    setExpenses(updated);
-    saveBudget(income, updated, savingsGoal);
+    setExpenses(updatedExpenses);
+
+    saveBudget(
+      income,
+      updatedExpenses,
+      savingsGoal
+    );
 
     setExpenseName("");
     setExpenseAmount("");
@@ -266,12 +320,17 @@ function App() {
 
   // Delete Expense
   const deleteExpense = (id) => {
-    const updated = expenses.filter(
+    const updatedExpenses = expenses.filter(
       (item) => item.id !== id
     );
 
-    setExpenses(updated);
-    saveBudget(income, updated, savingsGoal);
+    setExpenses(updatedExpenses);
+
+    saveBudget(
+      income,
+      updatedExpenses,
+      savingsGoal
+    );
   };
 
   // Update Savings Goal
@@ -286,7 +345,12 @@ function App() {
     }
 
     setSavingsGoal(amount);
-    saveBudget(income, expenses, amount);
+
+    saveBudget(
+      income,
+      expenses,
+      amount
+    );
 
     setGoalInput("");
   };
@@ -309,15 +373,12 @@ function App() {
 
     setMonthlyBudgets(updatedBudgets);
 
-    localStorage.setItem(
-      "budget_" + currentUser.email,
-      JSON.stringify({
-        income,
-        incomeHistory,
-        expenses,
-        savingsGoal,
-        monthlyBudgets: updatedBudgets
-      })
+    saveBudget(
+      income,
+      expenses,
+      savingsGoal,
+      incomeHistory,
+      updatedBudgets
     );
 
     alert("Monthly budget limit saved successfully!");
@@ -332,6 +393,8 @@ function App() {
     setSavingsGoal(0);
     setMonthlyBudgets({});
     setBudgetInput("");
+    setSearchTerm("");
+    setFilterCategory("All");
     setMessage("");
     setPage("home");
   };
@@ -343,6 +406,19 @@ function App() {
   );
 
   const balance = income - totalExpenses;
+
+  // Search and filter expenses
+  const filteredExpenses = expenses.filter((item) => {
+    const matchesSearch = item.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+
+    const matchesCategory =
+      filterCategory === "All" ||
+      item.category === filterCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   // Monthly calculations
   const monthlyExpenses = expenses.filter(
@@ -366,7 +442,7 @@ function App() {
   const monthlyBalance =
     monthlyTotalIncome - monthlyTotalExpenses;
 
-  // Monthly Budget Calculations
+  // Monthly budget calculations
   const selectedMonthBudget = Number(
     monthlyBudgets[selectedMonth] || 0
   );
@@ -378,6 +454,60 @@ function App() {
     selectedMonthBudget > 0
       ? (monthlyTotalExpenses / selectedMonthBudget) * 100
       : 0;
+
+  // Financial Health Score
+  let financialHealthScore = 0;
+
+  if (monthlyTotalIncome > 0) {
+    const savingsRate =
+      monthlyBalance / monthlyTotalIncome;
+
+    const savingsScore =
+      Math.min(Math.max(savingsRate, 0), 1) * 40;
+
+    const expenseRatio =
+      monthlyTotalExpenses / monthlyTotalIncome;
+
+    let expenseScore = 0;
+
+    if (expenseRatio <= 0.5) {
+      expenseScore = 40;
+    } else if (expenseRatio <= 0.8) {
+      expenseScore =
+        40 - ((expenseRatio - 0.5) / 0.3) * 20;
+    } else if (expenseRatio <= 1) {
+      expenseScore =
+        20 - ((expenseRatio - 0.8) / 0.2) * 20;
+    }
+
+    let budgetScore = 10;
+
+    if (selectedMonthBudget > 0) {
+      if (budgetUsage <= 80) {
+        budgetScore = 20;
+      } else if (budgetUsage <= 100) {
+        budgetScore = 10;
+      } else {
+        budgetScore = 0;
+      }
+    }
+
+    financialHealthScore = Math.round(
+      savingsScore + expenseScore + budgetScore
+    );
+  }
+
+  // Financial Health Rating
+  const healthRating =
+    monthlyTotalIncome === 0
+      ? "Add Monthly Income"
+      : financialHealthScore >= 80
+      ? "Excellent 🌟"
+      : financialHealthScore >= 60
+      ? "Good 😊"
+      : financialHealthScore >= 40
+      ? "Fair 💜"
+      : "Needs Improvement";
 
   // Category totals
   const monthlyCategoryTotals = monthlyExpenses.reduce(
@@ -397,33 +527,119 @@ function App() {
     return result;
   }, {});
 
-  const chartColors = [
-    "#2563eb",
-    "#e11d48",
-    "#059669",
-    "#f59e0b",
-    "#9333ea",
-    "#0891b2"
-  ];
-
-  let chartPosition = 0;
-
-  const chartGradient = Object.entries(categoryTotals)
-    .map(([cat, amount], index) => {
-      const start = chartPosition;
-
-      chartPosition += totalExpenses
-        ? (amount / totalExpenses) * 100
-        : 0;
-
-      return `${chartColors[index % chartColors.length]} ${start}% ${chartPosition}%`;
+  const categoryPieData = Object.entries(categoryTotals).map(
+    ([name, value]) => ({
+      name,
+      value
     })
-    .join(", ");
+  );
 
+  // SMART SPENDING INSIGHTS
+  const monthlyCategoryEntries = Object.entries(
+    monthlyCategoryTotals
+  ).sort((a, b) => b[1] - a[1]);
+
+  const highestSpendingCategory =
+    monthlyCategoryEntries.length > 0
+      ? monthlyCategoryEntries[0]
+      : null;
+
+  const topThreeCategories =
+    monthlyCategoryEntries.slice(0, 3);
+
+  const highestCategoryPercentage =
+    highestSpendingCategory && monthlyTotalExpenses > 0
+      ? (
+          (highestSpendingCategory[1] /
+            monthlyTotalExpenses) *
+          100
+        ).toFixed(1)
+      : 0;
+
+  const getSpendingInsight = () => {
+    if (monthlyExpenses.length === 0) {
+      return "Add expenses to discover your spending patterns.";
+    }
+
+    if (
+      monthlyTotalIncome > 0 &&
+      monthlyTotalExpenses > monthlyTotalIncome
+    ) {
+      return "Your expenses are higher than your income this month. Review your spending and consider reducing non-essential expenses.";
+    }
+
+    if (
+      selectedMonthBudget > 0 &&
+      budgetUsage > 100
+    ) {
+      return "You have exceeded your monthly budget. Review your largest spending categories.";
+    }
+
+    if (
+      selectedMonthBudget > 0 &&
+      budgetUsage >= 80
+    ) {
+      return "You have used at least 80% of your monthly budget. Keep an eye on your remaining expenses.";
+    }
+
+    if (highestSpendingCategory) {
+      return `${highestSpendingCategory[0]} is your highest spending category. Reviewing these expenses may help you manage your budget.`;
+    }
+
+    return "Keep recording your expenses to receive useful spending insights.";
+  };
+
+  const spendingInsight = getSpendingInsight();
+
+  // Six-month chart data
+  const monthlyChartData = Array.from(
+    { length: 6 },
+    (_, index) => {
+      const date = new Date();
+
+      date.setDate(1);
+      date.setMonth(date.getMonth() - (5 - index));
+
+      const year = date.getFullYear();
+
+      const month = String(
+        date.getMonth() + 1
+      ).padStart(2, "0");
+
+      const monthKey = `${year}-${month}`;
+
+      const monthIncome = incomeHistory
+        .filter((item) => getMonthKey(item) === monthKey)
+        .reduce(
+          (sum, item) => sum + Number(item.amount),
+          0
+        );
+
+      const monthExpense = expenses
+        .filter((item) => getMonthKey(item) === monthKey)
+        .reduce(
+          (sum, item) => sum + Number(item.amount),
+          0
+        );
+
+      return {
+        month: date.toLocaleDateString("en-IN", {
+          month: "short"
+        }),
+        income: monthIncome,
+        expenses: monthExpense
+      };
+    }
+  );
+
+  // Savings progress
   const savingsProgress =
     savingsGoal > 0
       ? Math.min(
-          Math.max((Math.max(balance, 0) / savingsGoal) * 100, 0),
+          Math.max(
+            (Math.max(balance, 0) / savingsGoal) * 100,
+            0
+          ),
           100
         )
       : 0;
@@ -435,6 +651,288 @@ function App() {
     year: "numeric"
   });
 
+  // Download PDF Report
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    let y = 20;
+
+    const addText = (text, fontSize = 11) => {
+      doc.setFontSize(fontSize);
+
+      const lines = doc.splitTextToSize(
+        String(text),
+        pageWidth - 40
+      );
+
+      if (y + lines.length * 7 > pageHeight - 20) {
+        doc.addPage();
+        y = 20;
+      }
+
+      doc.text(lines, 20, y);
+      y += lines.length * 7 + 3;
+    };
+
+    doc.setFontSize(20);
+    doc.text("Budget Planner - Financial Report", 20, y);
+    y += 12;
+
+    addText(`User: ${currentUser.name}`, 12);
+    addText(`Email: ${currentUser.email}`, 12);
+    addText(
+      `Report Date: ${new Date().toLocaleDateString("en-IN")}`
+    );
+
+    y += 5;
+
+    addText("OVERALL FINANCIAL SUMMARY", 15);
+    addText(`Total Income: Rs. ${income.toFixed(2)}`);
+    addText(`Total Expenses: Rs. ${totalExpenses.toFixed(2)}`);
+    addText(`Remaining Balance: Rs. ${balance.toFixed(2)}`);
+    addText(`Savings Goal: Rs. ${savingsGoal.toFixed(2)}`);
+
+    y += 5;
+
+    addText("FINANCIAL HEALTH SCORE", 15);
+    addText(
+      `Score: ${monthlyTotalIncome > 0 ? financialHealthScore + "/100" : "Not available"}`
+    );
+    addText(`Rating: ${healthRating}`);
+
+    y += 5;
+
+    addText("SMART SPENDING INSIGHTS", 15);
+    addText(spendingInsight);
+
+    if (highestSpendingCategory) {
+      addText(
+        `Highest Category: ${highestSpendingCategory[0]}`
+      );
+      addText(
+        `Highest Category Amount: Rs. ${highestSpendingCategory[1].toFixed(2)}`
+      );
+      addText(
+        `Share of Expenses: ${highestCategoryPercentage}%`
+      );
+    }
+
+    y += 5;
+
+    addText("MONTHLY FINANCIAL SUMMARY", 15);
+    addText(`Month: ${formattedMonth}`);
+    addText(`Monthly Income: Rs. ${monthlyTotalIncome.toFixed(2)}`);
+    addText(`Monthly Expenses: Rs. ${monthlyTotalExpenses.toFixed(2)}`);
+    addText(`Monthly Balance: Rs. ${monthlyBalance.toFixed(2)}`);
+    addText(`Monthly Budget: Rs. ${selectedMonthBudget.toFixed(2)}`);
+
+    y += 5;
+
+    addText("INCOME HISTORY", 15);
+
+    if (incomeHistory.length === 0) {
+      addText("No income records available.");
+    } else {
+      incomeHistory.forEach((item, index) => {
+        addText(
+          `${index + 1}. Rs. ${Number(item.amount).toFixed(2)} - ${getDisplayDate(item)}`
+        );
+      });
+    }
+
+    y += 5;
+
+    addText("EXPENSE HISTORY", 15);
+
+    if (expenses.length === 0) {
+      addText("No expense records available.");
+    } else {
+      expenses.forEach((item, index) => {
+        addText(
+          `${index + 1}. ${item.name} | ${item.category} | Rs. ${Number(item.amount).toFixed(2)} | ${getDisplayDate(item)}`
+        );
+      });
+    }
+
+    y += 5;
+
+    addText("CATEGORY BREAKDOWN", 15);
+
+    if (Object.keys(categoryTotals).length === 0) {
+      addText("No category records available.");
+    } else {
+      Object.entries(categoryTotals).forEach(([cat, amount]) => {
+        addText(`${cat}: Rs. ${amount.toFixed(2)}`);
+      });
+    }
+
+    doc.save("Budget-Planner-Financial-Report.pdf");
+  };
+
+  // Download Excel Report
+  const downloadExcel = () => {
+    const workbook = XLSX.utils.book_new();
+
+    const summaryData = [
+      { Particulars: "User Name", Value: currentUser.name },
+      { Particulars: "Email", Value: currentUser.email },
+      {
+        Particulars: "Report Date",
+        Value: new Date().toLocaleDateString("en-IN")
+      },
+      { Particulars: "Total Income", Value: income },
+      { Particulars: "Total Expenses", Value: totalExpenses },
+      { Particulars: "Remaining Balance", Value: balance },
+      { Particulars: "Savings Goal", Value: savingsGoal },
+      {
+        Particulars: "Financial Health Score",
+        Value: monthlyTotalIncome > 0
+          ? `${financialHealthScore}/100`
+          : "Not available"
+      },
+      { Particulars: "Health Rating", Value: healthRating },
+      { Particulars: "Selected Month", Value: formattedMonth },
+      { Particulars: "Monthly Income", Value: monthlyTotalIncome },
+      { Particulars: "Monthly Expenses", Value: monthlyTotalExpenses },
+      { Particulars: "Monthly Balance", Value: monthlyBalance },
+      { Particulars: "Monthly Budget", Value: selectedMonthBudget },
+      {
+        Particulars: "Highest Spending Category",
+        Value: highestSpendingCategory
+          ? highestSpendingCategory[0]
+          : "No expenses"
+      },
+      {
+        Particulars: "Highest Category Amount",
+        Value: highestSpendingCategory
+          ? highestSpendingCategory[1]
+          : 0
+      },
+      {
+        Particulars: "Spending Insight",
+        Value: spendingInsight
+      }
+    ];
+
+    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      summarySheet,
+      "Summary"
+    );
+
+    // Income sheet
+    const incomeData = incomeHistory.map((item) => ({
+      Amount: Number(item.amount),
+      Date: getDisplayDate(item)
+    }));
+
+    const incomeSheet = XLSX.utils.json_to_sheet(
+      incomeData.length
+        ? incomeData
+        : [{ Message: "No income records" }]
+    );
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      incomeSheet,
+      "Income"
+    );
+
+    // Expenses sheet
+    const expenseData = expenses.map((item) => ({
+      Expense: item.name,
+      Category: item.category,
+      Amount: Number(item.amount),
+      Date: getDisplayDate(item)
+    }));
+
+    const expenseSheet = XLSX.utils.json_to_sheet(
+      expenseData.length
+        ? expenseData
+        : [{ Message: "No expense records" }]
+    );
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      expenseSheet,
+      "Expenses"
+    );
+
+    // Monthly summary sheet
+    const monthlyData = [
+      {
+        Month: formattedMonth,
+        Income: monthlyTotalIncome,
+        Expenses: monthlyTotalExpenses,
+        Balance: monthlyBalance,
+        Budget: selectedMonthBudget,
+        BudgetUsedPercentage: Number(budgetUsage.toFixed(2))
+      }
+    ];
+
+    const monthlySheet = XLSX.utils.json_to_sheet(monthlyData);
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      monthlySheet,
+      "Monthly Summary"
+    );
+
+    // Category breakdown sheet
+    const categoryData = Object.entries(categoryTotals).map(
+      ([cat, amount]) => ({
+        Category: cat,
+        TotalAmount: amount
+      })
+    );
+
+    const categorySheet = XLSX.utils.json_to_sheet(
+      categoryData.length
+        ? categoryData
+        : [{ Message: "No category records" }]
+    );
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      categorySheet,
+      "Categories"
+    );
+
+    // Monthly spending insights sheet
+    const insightsData = monthlyCategoryEntries.map(
+      ([cat, amount], index) => ({
+        Rank: index + 1,
+        Category: cat,
+        Amount: amount,
+        Percentage: Number(
+          ((amount / monthlyTotalExpenses) * 100).toFixed(2)
+        )
+      })
+    );
+
+    const insightsSheet = XLSX.utils.json_to_sheet(
+      insightsData.length
+        ? insightsData
+        : [{ Message: "No monthly spending insights available" }]
+    );
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      insightsSheet,
+      "Spending Insights"
+    );
+
+    XLSX.writeFile(
+      workbook,
+      "Budget-Planner-Financial-Report.xlsx"
+    );
+  };
+
   return (
     <div className="app">
 
@@ -442,6 +940,7 @@ function App() {
       {page === "home" && (
         <div className="auth-container">
           <div className="brand-icon">₹</div>
+
           <h1>Budget Planner</h1>
           <h2>Manage Your Money Smartly</h2>
 
@@ -449,10 +948,12 @@ function App() {
             Track your income, expenses and savings in one place.
           </p>
 
-          <button onClick={() => {
-            setMessage("");
-            setPage("signup");
-          }}>
+          <button
+            onClick={() => {
+              setMessage("");
+              setPage("signup");
+            }}
+          >
             Sign Up
           </button>
 
@@ -496,7 +997,9 @@ function App() {
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            <button type="submit">Create Account</button>
+            <button type="submit">
+              Create Account
+            </button>
           </form>
 
           <p className="message">{message}</p>
@@ -504,6 +1007,7 @@ function App() {
           <p>
             Already registered?
             <button
+              type="button"
               className="text-btn"
               onClick={() => {
                 setMessage("");
@@ -544,7 +1048,9 @@ function App() {
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            <button type="submit">Login</button>
+            <button type="submit">
+              Login
+            </button>
           </form>
 
           <p className="message">{message}</p>
@@ -552,6 +1058,7 @@ function App() {
           <p>
             New user?
             <button
+              type="button"
               className="text-btn"
               onClick={() => {
                 setMessage("");
@@ -575,17 +1082,22 @@ function App() {
       {page === "dashboard" && currentUser && (
         <div className="dashboard">
 
+          {/* HEADER */}
           <header className="topbar">
             <div>
               <h1>₹ Budget Planner</h1>
               <p>Personal Finance Dashboard</p>
             </div>
 
-            <button className="logout-btn" onClick={logout}>
+            <button
+              className="logout-btn"
+              onClick={logout}
+            >
               Logout
             </button>
           </header>
 
+          {/* WELCOME */}
           <section className="welcome">
             <h2>Welcome, {currentUser.name}!</h2>
             <p>{currentUser.email}</p>
@@ -593,27 +1105,259 @@ function App() {
 
           {/* SUMMARY CARDS */}
           <section className="dashboard-cards">
-            <div className="stat-card income-card">
+
+            <motion.div
+              className="stat-card income-card"
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              whileHover={{ scale: 1.03 }}
+            >
               <span>Total Income</span>
               <h2>₹{income.toLocaleString("en-IN")}</h2>
               <p>Your total earnings</p>
-            </div>
+            </motion.div>
 
-            <div className="stat-card expense-card">
+            <motion.div
+              className="stat-card expense-card"
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7 }}
+              whileHover={{ scale: 1.03 }}
+            >
               <span>Total Expenses</span>
               <h2>₹{totalExpenses.toLocaleString("en-IN")}</h2>
               <p>Your total spending</p>
-            </div>
+            </motion.div>
 
-            <div className="stat-card balance-card">
+            <motion.div
+              className="stat-card balance-card"
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.9 }}
+              whileHover={{ scale: 1.03 }}
+            >
               <span>Remaining Balance</span>
               <h2>₹{balance.toLocaleString("en-IN")}</h2>
               <p>Your available money</p>
+            </motion.div>
+
+          </section>
+
+          {/* FINANCIAL HEALTH SCORE */}
+          <section
+            className="panel"
+            style={{
+              marginTop: "25px",
+              textAlign: "center"
+            }}
+          >
+            <h3>💜 Financial Health Score</h3>
+
+            <p>
+              Your financial performance for {formattedMonth}
+            </p>
+
+            <div
+              style={{
+                fontSize: "55px",
+                fontWeight: "bold",
+                color:
+                  financialHealthScore >= 80
+                    ? "#16a34a"
+                    : financialHealthScore >= 60
+                    ? "#2563eb"
+                    : financialHealthScore >= 40
+                    ? "#f59e0b"
+                    : "#dc2626",
+                margin: "15px 0"
+              }}
+            >
+              {monthlyTotalIncome > 0
+                ? `${financialHealthScore}/100`
+                : "--"}
+            </div>
+
+            <h2>{healthRating}</h2>
+
+            <div
+              className="progress-track"
+              style={{
+                maxWidth: "500px",
+                margin: "20px auto"
+              }}
+            >
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${financialHealthScore}%`,
+                  background:
+                    financialHealthScore >= 80
+                      ? "#16a34a"
+                      : financialHealthScore >= 60
+                      ? "#2563eb"
+                      : financialHealthScore >= 40
+                      ? "#f59e0b"
+                      : "#dc2626",
+                  transition: "width 0.5s ease"
+                }}
+              ></div>
+            </div>
+
+            <p className="summary-note">
+              Your score is calculated using savings,
+              expense control and monthly budget usage.
+            </p>
+
+            {monthlyTotalIncome === 0 && (
+              <p className="empty">
+                Add income for this month to calculate your score.
+              </p>
+            )}
+          </section>
+
+          {/* SMART SPENDING INSIGHTS */}
+          <section
+            className="panel"
+            style={{
+              marginTop: "25px",
+              background: "linear-gradient(135deg, #fff1f8, #f3e8ff)",
+              border: "1px solid #f0d4ec"
+            }}
+          >
+            <h3>✨ Smart Spending Insights</h3>
+
+            <p>
+              Helpful insights based on your {formattedMonth} expenses.
+            </p>
+
+            {monthlyExpenses.length === 0 ? (
+              <p className="empty">
+                Add expenses to discover your spending patterns.
+              </p>
+            ) : (
+              <>
+                {/* Highest Spending Category */}
+                <div
+                  style={{
+                    background: "white",
+                    padding: "18px",
+                    borderRadius: "12px",
+                    marginTop: "15px"
+                  }}
+                >
+                  <h4>🏆 Highest Spending Category</h4>
+
+                  <h2 style={{ color: "#9333ea" }}>
+                    {highestSpendingCategory[0]}
+                  </h2>
+
+                  <h3>
+                    ₹{highestSpendingCategory[1].toLocaleString("en-IN")}
+                  </h3>
+
+                  <p>
+                    {highestCategoryPercentage}% of your monthly expenses
+                  </p>
+                </div>
+
+                {/* Top Three Categories */}
+                <h4 style={{ marginTop: "25px" }}>
+                  📊 Your Top Spending Categories
+                </h4>
+
+                {topThreeCategories.map(
+                  ([cat, amount], index) => {
+                    const percentage =
+                      monthlyTotalExpenses > 0
+                        ? (amount / monthlyTotalExpenses) * 100
+                        : 0;
+
+                    return (
+                      <div
+                        key={cat}
+                        style={{
+                          background: "white",
+                          padding: "15px",
+                          borderRadius: "10px",
+                          marginTop: "12px"
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "10px",
+                            flexWrap: "wrap"
+                          }}
+                        >
+                          <strong>
+                            {index + 1}. {cat}
+                          </strong>
+
+                          <strong>
+                            ₹{amount.toLocaleString("en-IN")}
+                          </strong>
+                        </div>
+
+                        <div className="progress-track">
+                          <div
+                            className="progress-fill"
+                            style={{
+                              width: `${percentage}%`,
+                              background:
+                                chartColors[index % chartColors.length]
+                            }}
+                          ></div>
+                        </div>
+
+                        <p className="summary-note">
+                          {percentage.toFixed(1)}% of total monthly expenses
+                        </p>
+                      </div>
+                    );
+                  }
+                )}
+
+                {/* Automatic Suggestion */}
+                <div
+                  style={{
+                    background: "#ede9fe",
+                    color: "#5b21b6",
+                    padding: "18px",
+                    borderRadius: "12px",
+                    marginTop: "20px"
+                  }}
+                >
+                  <h4>💡 Your Spending Suggestion</h4>
+                  <p>{spendingInsight}</p>
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* DOWNLOAD REPORTS */}
+          <section className="panel">
+            <h3>📁 Download Financial Reports</h3>
+
+            <p>
+              Download your financial data whenever you need it.
+            </p>
+
+            <div className="report-buttons">
+              <button onClick={downloadPDF}>
+                📄 Download PDF Report
+              </button>
+
+              <button onClick={downloadExcel}>
+                📊 Download Excel Report
+              </button>
             </div>
           </section>
 
           {/* ADD INCOME AND EXPENSE */}
           <section className="forms-grid">
+
             <div className="panel">
               <h3>＋ Add Income</h3>
 
@@ -627,7 +1371,9 @@ function App() {
                   onChange={(e) => setIncomeInput(e.target.value)}
                 />
 
-                <button type="submit">Add Income</button>
+                <button type="submit">
+                  Add Income
+                </button>
               </form>
             </div>
 
@@ -662,51 +1408,125 @@ function App() {
                   <option>Other</option>
                 </select>
 
-                <button type="submit">Add Expense</button>
+                <button type="submit">
+                  Add Expense
+                </button>
               </form>
             </div>
+
           </section>
 
-          {/* ANALYTICS */}
+          {/* ADVANCED ANALYTICS */}
           <section className="analytics-grid">
-            <div className="panel">
-              <h3>Expense Distribution</h3>
 
-              {totalExpenses === 0 ? (
+            {/* PIE CHART */}
+            <div className="panel chart-panel">
+              <h3>🥧 Expense Category Distribution</h3>
+
+              {categoryPieData.length === 0 ? (
                 <p className="empty">
                   Add expenses to view your chart.
                 </p>
               ) : (
-                <>
-                  <div
-                    className="chart"
-                    style={{
-                      background: `conic-gradient(${chartGradient})`
-                    }}
-                  ></div>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={categoryPieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={95}
+                      label
+                    >
+                      {categoryPieData.map((entry, index) => (
+                        <Cell
+                          key={entry.name}
+                          fill={chartColors[index % chartColors.length]}
+                        />
+                      ))}
+                    </Pie>
 
-                  <div className="legend">
-                    {Object.entries(categoryTotals).map(
-                      ([cat, amount], index) => (
-                        <div key={cat}>
-                          <span
-                            style={{
-                              background:
-                                chartColors[index % chartColors.length]
-                            }}
-                          ></span>
+                    <Tooltip
+                      formatter={(value) =>
+                        `₹${Number(value).toLocaleString("en-IN")}`
+                      }
+                    />
 
-                          {cat}: ₹{amount.toLocaleString("en-IN")}
-                        </div>
-                      )
-                    )}
-                  </div>
-                </>
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
               )}
             </div>
 
+            {/* BAR CHART */}
+            <div className="panel chart-panel">
+              <h3>📊 Monthly Income vs Expenses</h3>
+
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={monthlyChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+
+                  <Tooltip
+                    formatter={(value) =>
+                      `₹${Number(value).toLocaleString("en-IN")}`
+                    }
+                  />
+
+                  <Legend />
+
+                  <Bar
+                    dataKey="income"
+                    fill="#16a34a"
+                    name="Income"
+                    radius={[6, 6, 0, 0]}
+                  />
+
+                  <Bar
+                    dataKey="expenses"
+                    fill="#ef4444"
+                    name="Expenses"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* LINE CHART */}
+            <div className="panel chart-panel">
+              <h3>📈 Six-Month Spending Trend</h3>
+
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={monthlyChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+
+                  <Tooltip
+                    formatter={(value) =>
+                      `₹${Number(value).toLocaleString("en-IN")}`
+                    }
+                  />
+
+                  <Legend />
+
+                  <Line
+                    type="monotone"
+                    dataKey="expenses"
+                    stroke="#9333ea"
+                    strokeWidth={3}
+                    name="Monthly Expenses"
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* FINANCIAL SUMMARY */}
             <div className="panel">
-              <h3>Overall Spending Summary</h3>
+              <h3>💰 Overall Spending Summary</h3>
 
               <div className="summary-row">
                 <span>Total Income</span>
@@ -727,20 +1547,25 @@ function App() {
                 All-time totals for your recorded transactions.
               </p>
             </div>
+
           </section>
 
           {/* MONTHLY TRACKING */}
           <section className="panel monthly-panel">
             <h3>📅 Monthly Expense Tracking</h3>
 
-            <p>Select a month to view your financial report.</p>
+            <p>
+              Select a month to view your financial report.
+            </p>
 
             <input
               type="month"
               value={selectedMonth}
               onChange={(e) => {
                 const month = e.target.value;
+
                 setSelectedMonth(month);
+
                 setBudgetInput(
                   monthlyBudgets[month]
                     ? String(monthlyBudgets[month])
@@ -752,6 +1577,7 @@ function App() {
             <h3>{formattedMonth} Report</h3>
 
             <div className="dashboard-cards">
+
               <div className="stat-card income-card">
                 <span>Monthly Income</span>
                 <h2>₹{monthlyTotalIncome.toLocaleString("en-IN")}</h2>
@@ -766,9 +1592,10 @@ function App() {
                 <span>Monthly Balance</span>
                 <h2>₹{monthlyBalance.toLocaleString("en-IN")}</h2>
               </div>
+
             </div>
 
-            {/* MONTHLY BUDGET LIMIT */}
+            {/* MONTHLY BUDGET */}
             <div className="panel">
               <h3>🎯 Monthly Budget Limit</h3>
 
@@ -886,6 +1713,7 @@ function App() {
               )}
             </div>
 
+            {/* CATEGORY BREAKDOWN */}
             <h3>Monthly Category Breakdown</h3>
 
             {Object.keys(monthlyCategoryTotals).length === 0 ? (
@@ -903,8 +1731,7 @@ function App() {
                           width: "10px",
                           height: "10px",
                           borderRadius: "50%",
-                          background:
-                            chartColors[index % chartColors.length],
+                          background: chartColors[index % chartColors.length],
                           marginRight: "8px"
                         }}
                       ></span>
@@ -919,6 +1746,7 @@ function App() {
               )
             )}
 
+            {/* MONTHLY TRANSACTIONS */}
             <h3>Transactions for {formattedMonth}</h3>
 
             {monthlyExpenses.length === 0 ? (
@@ -952,6 +1780,7 @@ function App() {
                 </table>
               </div>
             )}
+
           </section>
 
           {/* SAVINGS GOAL */}
@@ -968,7 +1797,9 @@ function App() {
                 onChange={(e) => setGoalInput(e.target.value)}
               />
 
-              <button type="submit">Set Goal</button>
+              <button type="submit">
+                Set Goal
+              </button>
             </form>
 
             {savingsGoal > 0 && (
@@ -984,7 +1815,9 @@ function App() {
                 <div className="progress-track">
                   <div
                     className="progress-fill"
-                    style={{ width: `${savingsProgress}%` }}
+                    style={{
+                      width: `${savingsProgress}%`
+                    }}
                   ></div>
                 </div>
 
@@ -1000,7 +1833,9 @@ function App() {
             <h3>Income History</h3>
 
             {incomeHistory.length === 0 ? (
-              <p className="empty">No income added yet.</p>
+              <p className="empty">
+                No income added yet.
+              </p>
             ) : (
               <div className="table-wrapper">
                 <table>
@@ -1037,12 +1872,46 @@ function App() {
             )}
           </section>
 
-          {/* EXPENSE HISTORY */}
+          {/* EXPENSE HISTORY WITH SEARCH AND FILTER */}
           <section className="panel history-panel">
             <h3>Expense History</h3>
 
-            {expenses.length === 0 ? (
-              <p className="empty">No expenses added yet.</p>
+            <div className="expense-filters">
+              <input
+                type="text"
+                placeholder="🔍 Search expenses..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                <option value="Food">Food</option>
+                <option value="Travel">Travel</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Education">Education</option>
+                <option value="Health">Health</option>
+                <option value="Other">Other</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setFilterCategory("All");
+                }}
+              >
+                Reset Filters
+              </button>
+            </div>
+
+            {filteredExpenses.length === 0 ? (
+              <p className="empty">
+                No matching expenses found.
+              </p>
             ) : (
               <div className="table-wrapper">
                 <table>
@@ -1057,7 +1926,7 @@ function App() {
                   </thead>
 
                   <tbody>
-                    {expenses.map((item) => (
+                    {filteredExpenses.map((item) => (
                       <tr key={item.id}>
                         <td>{item.name}</td>
                         <td>{item.category}</td>
@@ -1084,6 +1953,7 @@ function App() {
             )}
           </section>
 
+          {/* FOOTER */}
           <footer>
             <p>
               © 2026 Budget Planner | Manage Your Money Smartly
