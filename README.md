@@ -1,16 +1,73 @@
-# React + Vite
+# 💗 Budget Planner
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+### Personal Finance Management Dashboard
 
-Currently, two official plugins are available:
+Budget Planner is a simple and user-friendly personal finance application built using React. It helps users manage their income, track expenses, monitor savings goals, and control monthly budgets.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ✨ Features
 
-## React Compiler
+- 🔐 User Signup and Login
+- 💰 Add and Manage Income
+- 💸 Track Daily Expenses
+- 📊 Expense Distribution Chart
+- 🎯 Set Savings Goals
+- 📅 Monthly Expense Tracking
+- 💵 Monthly Budget Limits
+- 📈 Spending Summary
+- 🎨 Cute Pastel UI Design
+- 💾 Data Persistence using Local Storage
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Technologies Used
 
-## Expanding the ESLint configuration
+- React.js
+- JavaScript
+- HTML
+- CSS
+- Vite
+- Local Storage
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🚀 How to Run the Project
+
+1. Clone the repository:
+
+   `git clone https://github.com/Joshithavarma/budget-planner.git`
+
+2. Open the project folder:
+
+   `cd budget-planner`
+
+3. Install dependencies:
+
+   `npm install`
+
+4. Start the development server:
+
+   `npm run dev`
+
+5. Open the local URL shown in your terminal.
+
+## 📂 Project Structure
+
+```text
+budget-planner/
+├── public/
+├── src/
+│   ├── assets/
+│   ├── App.jsx
+│   ├── App.css
+│   ├── index.css
+│   └── main.jsx
+├── index.html
+├── package.json
+└── vite.config.js
+```
+
+## 👩‍💻 Developer
+
+**Joshitha Varma**
+
+GitHub: https://github.com/Joshithavarma
+
+---
+
+⭐ Thank you for visiting my Budget Planner project!
